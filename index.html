@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>👁️ 看穿你 — 浏览器信息探测工具</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+        :root {
+            --bg-deep: #050810;
+            --bg-primary: #0a0f1e;
+            --bg-card: rgba(13, 18, 35, 0.75);
+            --bg-card-hover: rgba(18, 25, 50, 0.85);
+            --border-dim: rgba(59, 130, 246, 0.12);
+            --border-bright: rgba(6, 182, 212, 0.4);
+            --text-primary: #e8ecf4;
+            --text-secondary: #7b8aad;
+            --text-dim: #4a5578;
+            --cyan: #06b6d4;
+            --blue: #3b82f6;
+            --purple: #8b5cf6;
+            --green: #10b981;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --pink: #ec4899;
+            --teal: #14b8a6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ========== 动态背景层 ========== */
+        .bg-layers {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            overflow: hidden;
+        }
+        .bg-grid {
+            position: absolute;
+            inset: -50%;
+            background-image: 
+                linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: gridDrift 25s linear infinite;
+            transform: perspective(500px) rotateX(60deg);
+        }
+        @keyframes gridDrift {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(60px); }
+        }
+        .bg-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            animation: orbFloat 15s ease-in-out infinite;
+        }
+        .bg-orb:nth-child(2) { width: 500px; height: 500px; background: var(--cyan); top: -10%; left: -10%; animation-delay: 0s; }
+        .bg-orb:nth-child(3) { width: 400px; height: 400px; background: var(--purple); bottom: -5%; right: -5%; animation-delay: -5s; }
+        .bg-orb:nth-child(4) { width: 300px; height: 300px; background: var(--blue); top: 40%; left: 50%; animation-delay: -10s; }
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+
+        /* 扫描线 */
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            opacity: 0.3;
+            animation: scanline 8s linear infinite;
+            z-index: 9999;
+            pointer-events: none;
+        }
+        @keyframes scanline {
+            0% { top: -2px; }
+            100% { top: 100vh; }
+        }
+
+        /* ========== 头部 ========== */
+        .header {
+            text-align: center;
+            padding: 80px 20px 50px;
+            position: relative;
+        }
+        .eye-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .eye-glow {
+            position: absolute;
+            inset: -20px;
+            background: radial-gradient(circle, rgba(6,182,212,0.3) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: eyePulse 3s ease-in-out infinite;
+        }
+        @keyframes eyePulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+        .main-title {
+            font-size: clamp(3rem, 10vw, 6rem);
+            font-weight: 900;
+            letter-spacing: -3px;
+            position: relative;
+            display: inline-block;
+        }
+        .main-title .gradient-text {
+            background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 25%, var(--purple) 50%, var(--pink) 75%, var(--cyan) 100%);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 5s ease infinite;
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .subtitle {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+        .subtitle-glitch {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        /* ========== 警告框 ========== */
+        .warning-box {
+            max-width: 720px;
+            margin: 40px auto 0;
+            background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.05));
+            border: 1px solid rgba(245,158,11,0.25);
+            border-radius: 14px;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            animation: fadeInUp 1s ease 0.6s both;
+        }
+        .warning-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 24px;
+            background: rgba(245,158,11,0.1);
+            border-bottom: 1px solid rgba(245,158,11,0.15);
+        }
+        .warning-icon {
+            font-size: 1.5rem;
+            animation: warningShake 2s ease-in-out infinite;
+        }
+        @keyframes warningShake {
+            0%, 100% { transform: rotate(0deg); }
+            10% { transform: rotate(-10deg); }
+            20% { transform: rotate(10deg); }
+            30% { transform: rotate(0deg); }
+        }
+        .warning-title {
+            font-weight: 700;
+            color: #fbbf24;
+            font-size: 1rem;
+        }
+        .warning-body {
+            padding: 16px 24px;
+            color: #d4a853;
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+        .warning-body code {
+            background: rgba(251,191,36,0.15);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        /* ========== 统计栏 ========== */
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            padding: 30px 20px;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            text-align: center;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease both;
+        }
+        .stat-item:nth-child(1) { animation-delay: 0.8s; }
+        .stat-item:nth-child(2) { animation-delay: 0.9s; }
+        .stat-item:nth-child(3) { animation-delay: 1.0s; }
+        .stat-item:nth-child(4) { animation-delay: 1.1s; }
+        .stat-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--cyan), var(--blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+
+        /* ========== 主体网格 ========== */
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 24px 80px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        @media (max-width: 1100px) {
+            .grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 700px) {
+            .grid { grid-template-columns: 1fr; gap: 16px; }
+            .container { padding: 0 16px 60px; }
+            .stats-bar { gap: 24px; }
+        }
+
+        /* ========== 卡片 ========== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-dim);
+            border-radius: 18px;
+            padding: 24px;
+            backdrop-filter: blur(24px) saturate(1.2);
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: cardReveal 0.8s cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        .card:nth-child(1) { animation-delay: 0.1s; }
+        .card:nth-child(2) { animation-delay: 0.15s; }
+        .card:nth-child(3) { animation-delay: 0.2s; }
+        .card:nth-child(4) { animation-delay: 0.25s; }
+        .card:nth-child(5) { animation-delay: 0.3s; }
+        .card:nth-child(6) { animation-delay: 0.35s; }
+        .card:nth-child(7) { animation-delay: 0.4s; }
+        .card:nth-child(8) { animation-delay: 0.45s; }
+        .card:nth-child(9) { animation-delay: 0.5s; }
+        .card:nth-child(10) { animation-delay: 0.55s; }
+        .card:nth-child(11) { animation-delay: 0.6s; }
+        @keyframes cardReveal {
+            from { opacity: 0; transform: translateY(30px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--cyan), var(--blue), var(--purple), var(--pink));
+            opacity: 0.6;
+            transition: opacity 0.4s;
+        }
+        .card::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(6,182,212,0.08) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.4s;
+            pointer-events: none;
+        }
+        .card:hover {
+            transform: translateY(-6px) scale(1.01);
+            border-color: var(--border-bright);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), 0 0 30px rgba(6,182,212,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+            background: var(--bg-card-hover);
+        }
+        .card:hover::before { opacity: 1; }
+        .card:hover::after { opacity: 1; }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .card-icon {
+            width: 46px; height: 46px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(59,130,246,0.15));
+            border: 1px solid rgba(6,182,212,0.2);
+            transition: all 0.3s;
+        }
+        .card:hover .card-icon {
+            transform: scale(1.1) rotate(-5deg);
+            border-color: rgba(6,182,212,0.4);
+        }
+        .card-title-group { flex: 1; }
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+        .card-subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 2px;
+        }
+
+        /* ========== 数据行 ========== */
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.025);
+            font-size: 0.88rem;
+            transition: background 0.2s;
+        }
+        .data-row:hover {
+            background: rgba(255,255,255,0.02);
+            margin: 0 -8px;
+            padding: 10px 8px;
+            border-radius: 8px;
+            border-bottom-color: transparent;
+        }
+        .data-row:last-child { border-bottom: none; }
+        .data-label {
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        .data-value {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--cyan);
+            font-weight: 600;
+            font-size: 0.82rem;
+            word-break: break-all;
+            text-align: right;
+            max-width: 55%;
+            transition: color 0.3s;
+        }
+        .data-value.highlight { color: var(--green); }
+        .data-value.warning { color: var(--orange); }
+        .data-value.danger { color: var(--red); }
+        .data-value.purple { color: var(--purple); }
+        .data-value.pink { color: var(--pink); }
+        .data-value.dim { color: var(--text-dim); }
+        .data-value .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .tag-green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+        .tag-red { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+        .tag-orange { background: rgba(245,158,11,0.15); color: var(--orange); border: 1px solid rgba(245,158,11,0.25); }
+        .tag-blue { background: rgba(59,130,246,0.15); color: var(--blue); border: 1px solid rgba(59,130,246,0.25); }
+        .tag-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.25); }
+
+        /* ========== 状态指示器 ========== */
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .status-pill.online {
+            background: rgba(16,185,129,0.12);
+            color: var(--green);
+            border: 1px solid rgba(16,185,129,0.25);
+        }
+        .status-pill.offline {
+            background: rgba(239,68,68,0.12);
+            color: var(--red);
+            border: 1px solid rgba(239,68,68,0.25);
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .status-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* ========== 进度条 ========== */
+        .progress-wrap { margin-top: 12px; }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+        }
+        .progress-track {
+            height: 6px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--cyan), var(--blue));
+            transition: width 1.2s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+            animation: shimmer 2.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* ========== 地图 ========== */
+        .map-wrap {
+            margin-top: 16px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-dim);
+            background: rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .map-wrap iframe {
+            width: 100%; height: 200px;
+            border: none;
+            display: block;
+        }
+        .map-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-dim);
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        .map-placeholder .icon { font-size: 2rem; opacity: 0.5; }
+
+        .btn-primary {
+            margin-top: 12px;
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            font-family: inherit;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(59,130,246,0.3);
+        }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        .btn-primary:hover::before { left: 100%; }
+
+        /* ========== 触摸区 ========== */
+        .touch-zone {
+            margin-top: 16px;
+            height: 130px;
+            border: 2px dashed rgba(6,182,212,0.2);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(6,182,212,0.03);
+            transition: all 0.3s;
+            cursor: pointer;
+            user-select: none;
+            touch-action: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .touch-zone:hover {
+            border-color: rgba(6,182,212,0.4);
+            background: rgba(6,182,212,0.06);
+        }
+        .touch-zone.active {
+            border-color: var(--green);
+            background: rgba(16,185,129,0.08);
+            border-style: solid;
+        }
+        .touch-zone .touch-hint {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+        .touch-zone .touch-data {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--green);
+            font-weight: 600;
+        }
+        .touch-ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(6,182,212,0.3);
+            transform: scale(0);
+            animation: ripple 0.6s ease-out;
+            pointer-events: none;
+        }
+        @keyframes ripple {
+            to { transform: scale(4); opacity: 0; }
+        }
+
+        /* ========== 能力网格 ========== */
+        .capability-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 16px;
+        }
+        @media (max-width: 400px) {
+            .capability-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .cap-item {
+            padding: 10px 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.78rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.25s;
+        }
+        .cap-item:hover {
+            background: rgba(255,255,255,0.05);
+            transform: translateY(-2px);
+            border-color: rgba(255,255,255,0.08);
+        }
+        .cap-name { font-weight: 500; }
+        .cap-badge {
+            font-size: 0.65rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cap-badge.yes {
+            background: rgba(16,185,129,0.15);
+            color: var(--green);
+            border: 1px solid rgba(16,185,129,0.2);
+        }
+        .cap-badge.no {
+            background: rgba(239,68,68,0.1);
+            color: var(--red);
+            border: 1px solid rgba(239,68,68,0.15);
+        }
+
+        /* ========== 设备列表 ========== */
+        .device-list { margin-top: 12px; }
+        .device-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            margin-bottom: 6px;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .device-row:hover {
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.06);
+            transform: translateX(4px);
+        }
+        .device-row:last-child { margin-bottom: 0; }
+        .device-icon {
+            width: 34px; height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .device-info { flex: 1; min-width: 0; }
+        .device-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .device-meta {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ========== 指纹区域 ========== */
+        .fingerprint-section {
+            max-width: 1000px;
+            margin: 60px auto 0;
+            padding: 0 20px;
+        }
+        .fp-card {
+            background: linear-gradient(135deg, rgba(6,182,212,0.06), rgba(139,92,246,0.06));
+            border: 1px solid rgba(6,182,212,0.2);
+            border-radius: 24px;
+            padding: 48px 40px;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(30px);
+            text-align: center;
+        }
+        .fp-card::before {
+            content: '';
+            position: absolute;
+            top: -100px; right: -100px;
+            width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%);
+            animation: orbRotate 20s linear infinite;
+        }
+        .fp-card::after {
+            content: '';
+            position: absolute;
+            bottom: -80px; left: -80px;
+            width: 250px; height: 250px;
+            background: radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%);
+            animation: orbRotate 25s linear infinite reverse;
+        }
+        @keyframes orbRotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .fp-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+            letter-spacing: -0.5px;
+        }
+        .fp-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 1;
+        }
+        .fp-hash-box {
+            position: relative;
+            z-index: 1;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(6,182,212,0.25);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 28px;
+            overflow: hidden;
+        }
+        .fp-hash-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+        }
+        .fp-hash {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.15rem;
+            color: var(--cyan);
+            letter-spacing: 3px;
+            word-break: break-all;
+            text-shadow: 0 0 20px rgba(6,182,212,0.3);
+            line-height: 1.8;
+        }
+        .fp-hash-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 8px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .fp-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            position: relative;
+            z-index: 1;
+        }
+        @media (max-width: 800px) {
+            .fp-grid { grid-template-columns: repeat(2, 1fr); }
+            .fp-card { padding: 32px 20px; }
+            .fp-hash { font-size: 0.9rem; }
+        }
+        .fp-detail {
+            background: rgba(0,0,0,0.3);
+            padding: 18px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s;
+        }
+        .fp-detail:hover {
+            border-color: rgba(6,182,212,0.2);
+            transform: translateY(-3px);
+        }
+        .fp-detail-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+        }
+        .fp-detail-value {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--green);
+            font-size: 0.85rem;
+            font-weight: 600;
+            word-break: break-all;
+        }
+        .fp-score-ring {
+            width: 80px; height: 80px;
+            margin: 0 auto 8px;
+            position: relative;
+        }
+        .fp-score-ring svg { transform: rotate(-90deg); }
+        .fp-score-ring circle {
+            fill: none;
+            stroke-width: 6;
+        }
+        .fp-score-ring .bg { stroke: rgba(255,255,255,0.05); }
+        .fp-score-ring .fg {
+            stroke: var(--green);
+            stroke-linecap: round;
+            transition: stroke-dashoffset 2s ease;
+        }
+        .fp-score-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+        .fp-score-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* ========== 实时指示器 ========== */
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16,185,129,0.1);
+            color: var(--green);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            border: 1px solid rgba(16,185,129,0.2);
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.5px;
+        }
+        .live-badge .dot {
+            width: 5px; height: 5px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: liveBlink 1.5s ease infinite;
+            box-shadow: 0 0 6px var(--green);
+        }
+        @keyframes liveBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* ========== 滚动条 ========== */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(var(--cyan), var(--purple));
+            border-radius: 3px;
+        }
+
+        /* ========== 加载动画 ========== */
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.08);
+            border-top-color: var(--cyan);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%);
+            background-size: 200% 100%;
+            animation: skeleton 1.5s infinite;
+            border-radius: 4px;
+            height: 16px;
+            width: 80px;
+            display: inline-block;
+        }
+        @keyframes skeleton {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* ========== 动画通用 ========== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== 底部信息 ========== */
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            margin-top: 40px;
+        }
+        .footer code {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255,255,255,0.03);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="bg-layers">
+        <div class="bg-grid"></div>
+        <div class="bg-orb"></div>
+        <div class="bg-orb"></div>
+        <div class="bg-orb"></div>
+    </div>
+
+    <header class="header">
+        <div class="eye-container"><div class="eye-glow"></div></div>
+        <h1 class="main-title"><span class="gradient-text">👁️ 看穿你</span></h1>
+        <p class="subtitle">你的浏览器正在泄露这些信息...</p>
+        <p class="subtitle-glitch">BROWSER FINGERPRINT DETECTOR v2.0</p>
+
+        <div class="warning-box">
+            <div class="warning-header">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-title">技术演示声明</span>
+            </div>
+            <div class="warning-body">
+                本页面仅用于展示浏览器可能暴露的技术信息，所有数据均在 <code>本地处理</code>，不会上传至任何服务器。请放心使用，并注意保护个人隐私。部分功能（如地理位置、传感器）需要用户授权才能获取。
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-number" id="statCards">11</div>
+                <div class="stat-label">检测模块</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="statApis">40+</div>
+                <div class="stat-label">检测指标</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="statRealTime">8</div>
+                <div class="stat-label">实时数据</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="statFingerprint">256</div>
+                <div class="stat-label">位哈希</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="grid">
+            <!-- 1. 基础身份 -->
+            <div class="card" data-card="identity">
+                <div class="card-header">
+                    <div class="card-icon">🆔</div>
+                    <div class="card-title-group">
+                        <div class="card-title">基础身份</div>
+                        <div class="card-subtitle">Basic Identity</div>
+                    </div>
+                    <span class="live-badge"><span class="dot"></span>LIVE</span>
+                </div>
+                <div class="data-row"><span class="data-label">🌐 User Agent</span><span class="data-value" id="userAgent"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">💻 操作系统</span><span class="data-value" id="os"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🌍 浏览器</span><span class="data-value" id="browser"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🗣️ 语言</span><span class="data-value" id="language"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🕐 时区</span><span class="data-value" id="timezone"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">⏰ 当前时间</span><span class="data-value" id="currentTime"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🌐 平台</span><span class="data-value" id="platform"><span class="skeleton"></span></span></div>
+            </div>
+
+            <!-- 2. 屏幕与显示 -->
+            <div class="card" data-card="screen">
+                <div class="card-header">
+                    <div class="card-icon">🖥️</div>
+                    <div class="card-title-group">
+                        <div class="card-title">屏幕与显示</div>
+                        <div class="card-subtitle">Screen & Display</div>
+                    </div>
+                    <span class="live-badge"><span class="dot"></span>LIVE</span>
+                </div>
+                <div class="data-row"><span class="data-label">📐 屏幕分辨率</span><span class="data-value" id="resolution"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📏 可用分辨率</span><span class="data-value" id="availResolution"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🪟 窗口大小</span><span class="data-value" id="windowSize"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🎨 颜色深度</span><span class="data-value" id="colorDepth"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🔍 像素比 (DPR)</span><span class="data-value" id="pixelRatio"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🔄 刷新率</span><span class="data-value" id="refreshRate"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">✨ HDR 支持</span><span class="data-value" id="hdrSupport"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🎯 色彩空间</span><span class="data-value" id="colorGamut"><span class="skeleton"></span></span></div>
+            </div>
+
+            <!-- 3. 硬件信息 -->
+            <div class="card" data-card="hardware">
+                <div class="card-header">
+                    <div class="card-icon">⚙️</div>
+                    <div class="card-title-group">
+                        <div class="card-title">硬件信息</div>
+                        <div class="card-subtitle">Hardware Info</div>
+                    </div>
+                </div>
+                <div class="data-row"><span class="data-label">🧠 CPU 核心数</span><span class="data-value highlight" id="cpuCores"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">💾 内存 (RAM)</span><span class="data-value highlight" id="memory"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🔋 电池电量</span><span class="data-value" id="batteryLevel"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">⚡ 充电状态</span><span class="data-value" id="chargingStatus"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">⏱️ 电池剩余</span><span class="data-value" id="batteryTime"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">👆 最大触摸点</span><span class="data-value" id="maxTouchPoints"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📳 振动支持</span><span class="data-value" id="vibration"><span class="skeleton"></span></span></div>
+            </div>
+
+            <!-- 4. 网络状态 -->
+            <div class="card" data-card="network">
+                <div class="card-header">
+                    <div class="card-icon">🌐</div>
+                    <div class="card-title-group">
+                        <div class="card-title">网络状态</div>
+                        <div class="card-subtitle">Network Status</div>
+                    </div>
+                    <span class="live-badge"><span class="dot"></span>LIVE</span>
+                </div>
+                <div class="data-row"><span class="data-label">📡 在线状态</span><span class="data-value" id="onlineStatus"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📶 网络类型</span><span class="data-value" id="connectionType"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">⬇️ 下行速度</span><span class="data-value" id="downlink"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📊 网络延迟</span><span class="data-value" id="rtt"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🎯 有效类型</span><span class="data-value" id="effectiveType"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📡 数据节省</span><span class="data-value" id="saveData"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🌍 IP 类型</span><span class="data-value" id="ipType"><span class="skeleton"></span></span></div>
+            </div>
+
+            <!-- 5. 地理位置 -->
+            <div class="card" data-card="geo">
+                <div class="card-header">
+                    <div class="card-icon">📍</div>
+                    <div class="card-title-group">
+                        <div class="card-title">地理位置</div>
+                        <div class="card-subtitle">Geolocation</div>
+                    </div>
+                </div>
+                <div class="data-row"><span class="data-label">🌍 纬度</span><span class="data-value" id="latitude">等待授权...</span></div>
+                <div class="data-row"><span class="data-label">🌍 经度</span><span class="data-value" id="longitude">等待授权...</span></div>
+                <div class="data-row"><span class="data-label">🏔️ 海拔</span><span class="data-value" id="altitude">等待授权...</span></div>
+                <div class="data-row"><span class="data-label">🚀 移动速度</span><span class="data-value" id="speed">等待授权...</span></div>
+                <div class="data-row"><span class="data-label">🎯 精度</span><span class="data-value" id="accuracy">等待授权...</span></div>
+                <div class="data-row"><span class="data-label">🧭 朝向</span><span class="data-value" id="heading">等待授权...</span></div>
+                <div class="map-wrap" id="mapContainer">
+                    <div class="map-placeholder">
+                        <span class="icon">🗺️</span>
+                        <span>点击获取位置以显示地图</span>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="requestLocation()">📍 获取当前位置</button>
+            </div>
+
+            <!-- 6. 传感器数据 -->
+            <div class="card" data-card="sensors">
+                <div class="card-header">
+                    <div class="card-icon">📱</div>
+                    <div class="card-title-group">
+                        <div class="card-title">传感器数据</div>
+                        <div class="card-subtitle">Sensors</div>
+                    </div>
+                    <span class="live-badge"><span class="dot"></span>LIVE</span>
+                </div>
+                <div class="data-row"><span class="data-label">📐 Alpha (Z)</span><span class="data-value" id="alpha">未激活</span></div>
+                <div class="data-row"><span class="data-label">📐 Beta (X)</span><span class="data-value" id="beta">未激活</span></div>
+                <div class="data-row"><span class="data-label">📐 Gamma (Y)</span><span class="data-value" id="gamma">未激活</span></div>
+                <div class="data-row"><span class="data-label">📊 加速度 X</span><span class="data-value" id="accX">未激活</span></div>
+                <div class="data-row"><span class="data-label">📊 加速度 Y</span><span class="data-value" id="accY">未激活</span></div>
+                <div class="data-row"><span class="data-label">📊 加速度 Z</span><span class="data-value" id="accZ">未激活</span></div>
+                <div class="touch-zone" id="touchArea">
+                    <span class="touch-hint">👆 在此区域触摸 / 滑动 / 长按</span>
+                    <span class="touch-data" id="touchData"></span>
+                </div>
+            </div>
+
+            <!-- 7. 浏览器能力 -->
+            <div class="card" data-card="capabilities">
+                <div class="card-header">
+                    <div class="card-icon">🔧</div>
+                    <div class="card-title-group">
+                        <div class="card-title">浏览器能力</div>
+                        <div class="card-subtitle">Capabilities</div>
+                    </div>
+                </div>
+                <div class="capability-grid" id="capabilityGrid"></div>
+            </div>
+
+            <!-- 8. 媒体设备 -->
+            <div class="card" data-card="media">
+                <div class="card-header">
+                    <div class="card-icon">🎥</div>
+                    <div class="card-title-group">
+                        <div class="card-title">媒体设备</div>
+                        <div class="card-subtitle">Media Devices</div>
+                    </div>
+                </div>
+                <div class="device-list" id="deviceList"></div>
+            </div>
+
+            <!-- 9. 存储与内存 -->
+            <div class="card" data-card="storage">
+                <div class="card-header">
+                    <div class="card-icon">💾</div>
+                    <div class="card-title-group">
+                        <div class="card-title">存储与内存</div>
+                        <div class="card-subtitle">Storage & Memory</div>
+                    </div>
+                </div>
+                <div class="data-row"><span class="data-label">🍪 Cookies</span><span class="data-value" id="cookiesEnabled"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📦 LocalStorage</span><span class="data-value" id="localStorage"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📦 SessionStorage</span><span class="data-value" id="sessionStorage"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🗄️ IndexedDB</span><span class="data-value" id="indexedDB"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">💽 存储配额</span><span class="data-value" id="storageQuota"><span class="skeleton"></span></span></div>
+                <div class="progress-wrap">
+                    <div class="progress-header">
+                        <span style="color:var(--text-dim);font-size:0.75rem;">已用 / 总额</span>
+                        <span style="color:var(--cyan);font-size:0.75rem;font-family:'JetBrains Mono',monospace;" id="storagePercent">--</span>
+                    </div>
+                    <div class="progress-track"><div class="progress-fill" id="storageBar" style="width:0%"></div></div>
+                </div>
+                <div class="progress-wrap" style="margin-top:14px;">
+                    <div class="progress-header">
+                        <span style="color:var(--text-dim);font-size:0.75rem;">JS 堆内存</span>
+                        <span style="color:var(--cyan);font-size:0.75rem;font-family:'JetBrains Mono',monospace;" id="memoryPercent">--</span>
+                    </div>
+                    <div class="progress-track"><div class="progress-fill" id="memoryBar" style="width:0%"></div></div>
+                </div>
+            </div>
+
+            <!-- 10. 字体指纹 -->
+            <div class="card" data-card="fonts">
+                <div class="card-header">
+                    <div class="card-icon">🔤</div>
+                    <div class="card-title-group">
+                        <div class="card-title">字体指纹</div>
+                        <div class="card-subtitle">Font Fingerprint</div>
+                    </div>
+                </div>
+                <div class="data-row"><span class="data-label">🔤 系统字体</span><span class="data-value" id="systemFonts" style="font-size:0.78rem;"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">📏 字体渲染</span><span class="data-value" id="fontRendering"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🎨 Canvas 字体</span><span class="data-value" id="canvasFont"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">#️⃣ 字体哈希</span><span class="data-value" id="fontHash" style="font-size:0.78rem;"><span class="skeleton"></span></span></div>
+                <div class="data-row"><span class="data-label">🔤 标准字体</span><span class="data-value" id="standardFonts"><span class="skeleton"></span></span></div>
+            </div>
+
+            <!-- 11. 插件信息 -->
+            <div class="card" data-card="plugins">
+                <div class="card-header">
+                    <div class="card-icon">🔌</div>
+                    <div class="card-title-group">
+                        <div class="card-title">插件信息</div>
+                        <div class="card-subtitle">Plugins</div>
+                    </div>
+                </div>
+                <div id="pluginsList"></div>
+            </div>
+        </div>
+
+        <!-- 浏览器指纹区域 -->
+        <section class="fingerprint-section">
+            <div class="fp-card">
+                <h2 class="fp-title">🔐 浏览器唯一指纹</h2>
+                <p class="fp-subtitle">基于 Canvas、WebGL、字体、硬件等多维度信息生成的 SHA-256 哈希值</p>
+                <div class="fp-hash-box">
+                    <div class="fp-hash-label">Combined Fingerprint Hash</div>
+                    <div class="fp-hash" id="fingerprintHash"><span class="spinner"></span> 正在计算指纹...</div>
+                </div>
+                <div class="fp-grid">
+                    <div class="fp-detail">
+                        <div class="fp-detail-label">Canvas 指纹</div>
+                        <div class="fp-detail-value" id="canvasFingerprint">--</div>
+                    </div>
+                    <div class="fp-detail">
+                        <div class="fp-detail-label">WebGL 指纹</div>
+                        <div class="fp-detail-value" id="webglFingerprint">--</div>
+                    </div>
+                    <div class="fp-detail">
+                        <div class="fp-detail-label">综合指纹</div>
+                        <div class="fp-detail-value" id="combinedFingerprint">--</div>
+                    </div>
+                    <div class="fp-detail">
+                        <div class="fp-detail-label">唯一性评分</div>
+                        <div class="fp-score-ring">
+                            <svg width="80" height="80" viewBox="0 0 80 80">
+                                <circle class="bg" cx="40" cy="40" r="34"/>
+                                <circle class="fg" id="scoreRing" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                            </svg>
+                            <div class="fp-score-text" id="scoreNumber">--</div>
+                        </div>
+                        <div class="fp-score-desc" id="scoreDesc">计算中...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>👁️ 看穿你 — 浏览器信息探测工具 v2.0 | 所有数据本地处理，不上传服务器</p>
+        <p style="margin-top:6px;">使用 <code>navigator</code>、<code>screen</code>、<code>performance</code> 等标准 Web API 获取</p>
+    </footer>
+
+    <script>
+        // ========== 工具函数 ==========
+        const $ = id => document.getElementById(id);
+        const set = (id, html, cls = '') => {
+            const el = $(id);
+            if (!el) return;
+            el.innerHTML = html;
+            if (cls) el.className = 'data-value ' + cls;
+        };
+        const tag = (text, type) => `<span class="tag tag-${type}">${text}</span>`;
+
+        // ========== 鼠标追踪光效 ==========
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                card.style.setProperty('--mouse-x', x + '%');
+                card.style.setProperty('--mouse-y', y + '%');
+            });
+        });
+
+        // ========== 浏览器检测 ==========
+        function detectBrowser() {
+            const ua = navigator.userAgent;
+            let browser = 'Unknown', version = '', os = 'Unknown', osVersion = '';
+
+            const bMap = [
+                ['Edg/', 'Edge'], ['OPR/', 'Opera'], ['Chrome/', 'Chrome'],
+                ['Safari/', 'Safari'], ['Firefox/', 'Firefox'], ['Trident/', 'IE']
+            ];
+            for (const [key, name] of bMap) {
+                const idx = ua.indexOf(key);
+                if (idx !== -1) {
+                    browser = name;
+                    const vStart = idx + key.length;
+                    version = ua.substring(vStart).split(' ')[0].split(';')[0];
+                    break;
+                }
+            }
+            if (ua.includes('Chrome/') && ua.includes('Edg/')) browser = 'Edge';
+
+            const osMap = [
+                [/Windows NT 10\.0/, 'Windows', '11/10'],
+                [/Windows NT 6\.3/, 'Windows', '8.1'],
+                [/Windows NT 6\.2/, 'Windows', '8'],
+                [/Windows NT 6\.1/, 'Windows', '7'],
+                [/Mac OS X 10_15|Mac OS X 10\.15/, 'macOS', 'Catalina'],
+                [/Mac OS X 10_14|Mac OS X 10\.14/, 'macOS', 'Mojave'],
+                [/Mac OS X/, 'macOS', ''],
+                [/Android (\d+\.?\d*)/, 'Android', ''],
+                [/iPhone OS (\d+_?\d*)/, 'iOS', ''],
+                [/iPad/, 'iPadOS', ''],
+                [/Linux/, 'Linux', '']
+            ];
+            for (const [re, name, ver] of osMap) {
+                const m = ua.match(re);
+                if (m) { os = name; osVersion = ver || (m[1] || ''); break; }
+            }
+            return { browser, version, os, osVersion, ua };
+        }
+
+        async function sha256(msg) {
+            const buf = new TextEncoder().encode(msg);
+            const hash = await crypto.subtle.digest('SHA-256', buf);
+            return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // ========== 1. 基础身份 ==========
+        function initIdentity() {
+            const { browser, version, os, osVersion, ua } = detectBrowser();
+            set('userAgent', ua.substring(0, 55) + (ua.length > 55 ? '…' : ''), 'dim');
+            set('os', os + (osVersion ? ' ' + osVersion : ''));
+            set('browser', browser + (version ? ' ' + version : ''));
+            set('language', navigator.language || 'N/A');
+            set('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'N/A');
+            set('platform', navigator.platform || 'N/A');
+
+            const updateTime = () => {
+                const now = new Date();
+                set('currentTime', now.toLocaleString('zh-CN', {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                }));
+            };
+            updateTime();
+            setInterval(updateTime, 1000);
+        }
+
+        // ========== 2. 屏幕与显示 ==========
+        function initScreen() {
+            const update = () => {
+                set('resolution', `${screen.width} × ${screen.height}`);
+                set('availResolution', `${screen.availWidth} × ${screen.availHeight}`);
+                set('windowSize', `${window.innerWidth} × ${window.innerHeight}`);
+                set('colorDepth', `${screen.colorDepth}-bit`);
+                set('pixelRatio', `${window.devicePixelRatio.toFixed(2)}x`);
+                const hdr = window.matchMedia('(dynamic-range: high)').matches;
+                set('hdrSupport', hdr ? tag('支持', 'green') : tag('不支持', 'orange'));
+                const gamuts = ['srgb', 'p3', 'rec2020'];
+                const supported = gamuts.filter(g => {
+                    try { return window.matchMedia(`(color-gamut: ${g})`).matches; }
+                    catch(e) { return false; }
+                });
+                set('colorGamut', supported.length ? supported.join(', ').toUpperCase() : 'sRGB');
+            };
+            let frames = 0, lastT = performance.now();
+            function measureFPS() {
+                frames++;
+                const now = performance.now();
+                if (now - lastT >= 1000) {
+                    const fps = Math.round(frames * 1000 / (now - lastT));
+                    set('refreshRate', `~${fps} Hz`);
+                    frames = 0; lastT = now;
+                }
+                requestAnimationFrame(measureFPS);
+            }
+            measureFPS();
+            update();
+            window.addEventListener('resize', update);
+        }
+
+        // ========== 3. 硬件信息 ==========
+        async function initHardware() {
+            set('cpuCores', navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} 核` : 'N/A');
+            set('memory', navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'N/A');
+            set('maxTouchPoints', (navigator.maxTouchPoints || 0) + ' 点');
+            set('vibration', 'vibrate' in navigator ? tag('支持', 'green') : tag('不支持', 'orange'));
+
+            if ('getBattery' in navigator) {
+                try {
+                    const bat = await navigator.getBattery();
+                    const updateBat = () => {
+                        const lvl = Math.round(bat.level * 100);
+                        const color = lvl > 50 ? 'green' : (lvl > 20 ? 'orange' : 'red');
+                        set('batteryLevel', `${lvl}% ${bat.charging ? '⚡' : '🔋'}`, color);
+                        set('chargingStatus', bat.charging ? tag('充电中', 'green') : tag('放电中', 'orange'));
+                        const time = bat.charging ? bat.chargingTime : bat.dischargingTime;
+                        set('batteryTime', time !== Infinity ? `${Math.round(time / 60)} 分钟` : '计算中...');
+                    };
+                    updateBat();
+                    bat.addEventListener('levelchange', updateBat);
+                    bat.addEventListener('chargingchange', updateBat);
+                } catch(e) {
+                    set('batteryLevel', '受限');
+                }
+            } else {
+                set('batteryLevel', 'API 不可用');
+            }
+        }
+
+        // ========== 4. 网络状态 ==========
+        function initNetwork() {
+            const update = () => {
+                const online = navigator.onLine;
+                set('onlineStatus', online 
+                    ? '<span class="status-pill online"><span class="status-dot online"></span>在线</span>'
+                    : '<span class="status-pill offline"><span class="status-dot offline"></span>离线</span>'
+                );
+                const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                if (conn) {
+                    set('connectionType', conn.type || '未知');
+                    set('downlink', conn.downlink ? `${conn.downlink} Mbps` : 'N/A');
+                    set('rtt', conn.rtt ? `${conn.rtt} ms` : 'N/A');
+                    set('effectiveType', conn.effectiveType || 'N/A');
+                    set('saveData', conn.saveData ? tag('开启', 'orange') : tag('关闭', 'green'));
+                } else {
+                    set('connectionType', 'N/A');
+                    set('downlink', 'N/A');
+                    set('rtt', 'N/A');
+                    set('effectiveType', 'N/A');
+                    set('saveData', 'N/A');
+                }
+                set('ipType', window.RTCPeerConnection ? 'IPv4/IPv6' : '未知');
+            };
+            update();
+            window.addEventListener('online', update);
+            window.addEventListener('offline', update);
+            const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (conn) conn.addEventListener('change', update);
+        }
+
+        // ========== 5. 地理位置 ==========
+        function requestLocation() {
+            if (!navigator.geolocation) {
+                set('latitude', '不支持');
+                set('longitude', '不支持');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const lat = pos.coords.latitude.toFixed(6);
+                    const lng = pos.coords.longitude.toFixed(6);
+                    const alt = pos.coords.altitude ? pos.coords.altitude.toFixed(2) + ' m' : 'N/A';
+                    const spd = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(2) + ' km/h' : '静止';
+                    const acc = pos.coords.accuracy ? '±' + Math.round(pos.coords.accuracy) + ' m' : 'N/A';
+                    const head = pos.coords.heading !== null ? pos.coords.heading.toFixed(1) + '°' : 'N/A';
+
+                    set('latitude', lat);
+                    set('longitude', lng);
+                    set('altitude', alt);
+                    set('speed', spd);
+                    set('accuracy', acc);
+                    set('heading', head);
+
+                    const mapUrl = `https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d1000!2d${lng}!3d${lat}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1szh-CN!2scn!4v1`;
+                    $('mapContainer').innerHTML = `<iframe src="${mapUrl}" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+                },
+                err => {
+                    const errs = ['', '用户拒绝授权', '位置不可用', '请求超时'];
+                    set('latitude', '错误: ' + errs[err.code]);
+                    set('longitude', '错误: ' + errs[err.code]);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // ========== 6. 传感器 ==========
+        function initSensors() {
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', e => {
+                    set('alpha', e.alpha ? e.alpha.toFixed(2) + '°' : 'N/A');
+                    set('beta', e.beta ? e.beta.toFixed(2) + '°' : 'N/A');
+                    set('gamma', e.gamma ? e.gamma.toFixed(2) + '°' : 'N/A');
+                });
+            }
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', e => {
+                    const acc = e.accelerationIncludingGravity;
+                    if (acc) {
+                        set('accX', acc.x ? acc.x.toFixed(2) + ' m/s²' : 'N/A');
+                        set('accY', acc.y ? acc.y.toFixed(2) + ' m/s²' : 'N/A');
+                        set('accZ', acc.z ? acc.z.toFixed(2) + ' m/s²' : 'N/A');
+                    }
+                });
+            }
+
+            const touchArea = $('touchArea');
+            const touchData = $('touchData');
+            touchArea.addEventListener('touchstart', e => {
+                touchArea.classList.add('active');
+                touchData.textContent = `${e.touches.length} 点触摸中`;
+                // 涟漪效果
+                const rect = touchArea.getBoundingClientRect();
+                for (const t of e.changedTouches) {
+                    const ripple = document.createElement('div');
+                    ripple.className = 'touch-ripple';
+                    ripple.style.cssText = `width:40px;height:40px;left:${t.clientX - rect.left - 20}px;top:${t.clientY - rect.top - 20}px;`;
+                    touchArea.appendChild(ripple);
+                    setTimeout(() => ripple.remove(), 600);
+                }
+            });
+            touchArea.addEventListener('touchend', () => {
+                touchArea.classList.remove('active');
+                touchData.textContent = '';
+            });
+            touchArea.addEventListener('touchmove', e => {
+                touchData.textContent = `${e.touches.length} 点 | X:${Math.round(e.touches[0].clientX)} Y:${Math.round(e.touches[0].clientY)}`;
+            });
+        }
+
+        // ========== 7. 浏览器能力 ==========
+        function initCapabilities() {
+            const caps = [
+                { name: 'Cookies', check: () => navigator.cookieEnabled },
+                { name: 'WebGL', check: () => !!document.createElement('canvas').getContext('webgl') },
+                { name: 'WebGL2', check: () => !!document.createElement('canvas').getContext('webgl2') },
+                { name: 'WebRTC', check: () => !!window.RTCPeerConnection },
+                { name: '蓝牙', check: () => 'bluetooth' in navigator },
+                { name: 'USB', check: () => 'usb' in navigator },
+                { name: 'NFC', check: () => 'nfc' in navigator },
+                { name: 'Service Worker', check: () => 'serviceWorker' in navigator },
+                { name: 'Push API', check: () => 'PushManager' in window },
+                { name: 'Web Share', check: () => 'share' in navigator },
+                { name: 'Clipboard', check: () => 'clipboard' in navigator },
+                { name: 'Payment', check: () => 'PaymentRequest' in window },
+            ];
+            const grid = $('capabilityGrid');
+            caps.forEach(cap => {
+                const ok = cap.check();
+                const div = document.createElement('div');
+                div.className = 'cap-item';
+                div.innerHTML = `<span class="cap-name">${cap.name}</span><span class="cap-badge ${ok ? 'yes' : 'no'}">${ok ? '✓' : '✗'}</span>`;
+                grid.appendChild(div);
+            });
+        }
+
+        // ========== 8. 媒体设备 ==========
+        async function initMediaDevices() {
+            const list = $('deviceList');
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                if (devices.length === 0) {
+                    list.innerHTML = '<div class="device-row"><span>未检测到媒体设备</span></div>';
+                    return;
+                }
+                devices.forEach(dev => {
+                    const icon = dev.kind.includes('video') ? '📹' : (dev.kind.includes('audio') ? '🎤' : '🔊');
+                    const div = document.createElement('div');
+                    div.className = 'device-row';
+                    div.innerHTML = `
+                        <div class="device-icon">${icon}</div>
+                        <div class="device-info">
+                            <div class="device-name">${dev.label || '未命名设备'}</div>
+                            <div class="device-meta">${dev.kind}</div>
+                        </div>`;
+                    list.appendChild(div);
+                });
+            } catch (e) {
+                list.innerHTML = '<div class="device-row"><span>无法访问 (需要 HTTPS)</span></div>';
+            }
+        }
+
+        // ========== 9. 存储与内存 ==========
+        async function initStorage() {
+            set('cookiesEnabled', navigator.cookieEnabled ? tag('启用', 'green') : tag('禁用', 'red'));
+            set('localStorage', !!window.localStorage ? tag('可用', 'green') : tag('不可用', 'red'));
+            set('sessionStorage', !!window.sessionStorage ? tag('可用', 'green') : tag('不可用', 'red'));
+            set('indexedDB', !!window.indexedDB ? tag('可用', 'green') : tag('不可用', 'red'));
+
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                try {
+                    const est = await navigator.storage.estimate();
+                    const used = est.usage || 0;
+                    const quota = est.quota || 1;
+                    const usedGB = (used / 1024 / 1024 / 1024).toFixed(2);
+                    const quotaGB = (quota / 1024 / 1024 / 1024).toFixed(2);
+                    const pct = Math.min((used / quota) * 100, 100);
+                    set('storageQuota', `${usedGB} / ${quotaGB} GB`);
+                    $('storagePercent').textContent = pct.toFixed(1) + '%';
+                    $('storageBar').style.width = pct + '%';
+                } catch (e) {
+                    set('storageQuota', '无法获取');
+                }
+            } else {
+                set('storageQuota', 'API 不可用');
+            }
+
+            if ('memory' in performance) {
+                const mem = performance.memory;
+                const used = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
+                const limit = (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(1);
+                const pct = (mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100;
+                $('memoryPercent').textContent = used + ' / ' + limit + ' MB';
+                $('memoryBar').style.width = pct + '%';
+            } else {
+                $('memoryPercent').textContent = 'API 不可用';
+            }
+        }
+
+        // ========== 10. 字体指纹 ==========
+        function initFontFingerprint() {
+            const fonts = ['Arial','Times New Roman','Helvetica','Courier New','Verdana','Georgia',
+                'Palatino','Garamond','Bookman','Comic Sans MS','Trebuchet MS','Arial Black','Impact',
+                'Segoe UI','Roboto','Noto Sans','PingFang SC','Microsoft YaHei','SimSun','STHeiti'];
+            const detected = [];
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const testStr = 'mmmmmmmmmmlli';
+            const baseFont = 'monospace';
+            ctx.font = `72px ${baseFont}`;
+            const baseline = ctx.measureText(testStr).width;
+
+            fonts.forEach(font => {
+                ctx.font = `72px "${font}", ${baseFont}`;
+                if (ctx.measureText(testStr).width !== baseline) detected.push(font);
+            });
+
+            set('systemFonts', detected.slice(0, 5).join(', ') + (detected.length > 5 ? ` 等${detected.length}种` : ''));
+            set('fontRendering', window.devicePixelRatio > 1 ? 'HiDPI / 子像素' : '标准渲染');
+            set('canvasFont', ctx.font.substring(0, 30));
+            set('standardFonts', 'Arial, Times, Courier, Verdana, Georgia');
+
+            const fontData = detected.join('') + baseline;
+            sha256(fontData).then(hash => {
+                set('fontHash', hash.substring(0, 16) + '...');
+            });
+        }
+
+        // ========== 11. 插件信息 ==========
+        function initPlugins() {
+            const list = $('pluginsList');
+            if (navigator.plugins && navigator.plugins.length > 0) {
+                Array.from(navigator.plugins).forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = 'data-row';
+                    div.innerHTML = `
+                        <span class="data-label">🔌 ${p.name}</span>
+                        <span class="data-value dim" style="font-size:0.78rem;">${p.description.substring(0, 35)}${p.description.length > 35 ? '...' : ''}</span>`;
+                    list.appendChild(div);
+                });
+            } else {
+                list.innerHTML = '<div class="data-row"><span class="data-label">ℹ️ 插件信息</span><span class="data-value dim">现代浏览器已限制插件检测</span></div>';
+            }
+        }
+
+        // ========== 浏览器指纹 ==========
+        async function initFingerprint() {
+            // Canvas 指纹
+            const cvs = document.createElement('canvas');
+            const ctx = cvs.getContext('2d');
+            cvs.width = 200; cvs.height = 50;
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#f60';
+            ctx.fillRect(10, 10, 50, 50);
+            ctx.fillStyle = '#069';
+            ctx.fillText('Hello, 看穿你! 👁️', 10, 10);
+            ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+            ctx.fillText('Browser Fingerprint v2', 10, 30);
+            const canvasData = cvs.toDataURL();
+            const canvasHash = await sha256(canvasData);
+            $('canvasFingerprint').textContent = canvasHash.substring(0, 16) + '...';
+
+            // WebGL 指纹
+            const glCanvas = document.createElement('canvas');
+            const gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
+            let webglHash = 'N/A';
+            if (gl) {
+                const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                let wglData = '';
+                if (dbg) {
+                    wglData = gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) + '|' + gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+                }
+                wglData += '|' + gl.getParameter(gl.VERSION) + '|' + gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+                webglHash = await sha256(wglData);
+            }
+            $('webglFingerprint').textContent = webglHash.substring(0, 16) + '...';
+
+            // 综合指纹
+            const fpData = [
+                navigator.userAgent, navigator.language,
+                screen.width + 'x' + screen.height, screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                !!window.sessionStorage, !!window.localStorage, !!window.indexedDB,
+                navigator.hardwareConcurrency, navigator.deviceMemory,
+                canvasHash, webglHash
+            ].join('###');
+
+            const combinedHash = await sha256(fpData);
+            $('combinedFingerprint').textContent = combinedHash.substring(0, 16) + '...';
+            $('fingerprintHash').textContent = combinedHash;
+
+            // 唯一性评分
+            const entropy = combinedHash.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+            const score = Math.min(99, Math.max(70, (entropy % 30) + 70));
+            const circumference = 2 * Math.PI * 34; // r=34
+            const offset = circumference - (score / 100) * circumference;
+
+            const scoreColor = score > 90 ? 'var(--red)' : (score > 80 ? 'var(--orange)' : 'var(--green)');
+            const scoreRing = $('scoreRing');
+            scoreRing.style.stroke = scoreColor;
+
+            // 动画填充圆环
+            setTimeout(() => {
+                scoreRing.style.strokeDashoffset = offset;
+            }, 500);
+
+            $('scoreNumber').textContent = score + '%';
+            $('scoreNumber').style.color = scoreColor;
+            $('scoreDesc').textContent = score > 90 ? '⚠️ 极易追踪' : score > 80 ? '△ 较易追踪' : '✓ 相对安全';
+            $('scoreDesc').style.color = scoreColor;
+        }
+
+        // ========== 初始化 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            initIdentity();
+            initScreen();
+            initHardware();
+            initNetwork();
+            initSensors();
+            initCapabilities();
+            initMediaDevices();
+            initStorage();
+            initFontFingerprint();
+            initPlugins();
+            initFingerprint();
+        });
+    </script>
+</body>
+</html>
